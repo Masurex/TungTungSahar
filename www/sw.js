@@ -1,6 +1,6 @@
 // Service worker: caches only the app shell so the app opens instantly.
 // Music is never cached — it is always streamed.
-const CACHE = 'sahar-shell-v1';
+const CACHE = 'volna-shell-v1';
 const SHELL = [
   './', 'index.html', 'css/app.css',
   'js/app.js', 'js/api.js', 'js/player.js', 'js/store.js', 'js/icons.js',

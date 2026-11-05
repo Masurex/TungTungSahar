@@ -93,7 +93,7 @@ const errorBox = (msg) => `<div class="empty err">${icon('music', 40)}<p>${esc(m
 function setTitle(title, back = false) {
   $('#pageTitle').textContent = title;
   $('#backBtn').hidden = !back;
-  document.title = title === 'Sahar' ? 'Sahar Музыка' : `${title} · Sahar`;
+  document.title = title === 'Volna' ? 'Volna Музыка' : `${title} · Volna`;
 }
 
 /* -------------------------------- views -------------------------------- */

@@ -197,7 +197,7 @@ function updateMediaSession(item) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: item.title,
       artist: item.artist,
-      album: item.live ? 'Радио' : 'Sahar',
+      album: item.live ? 'Радио' : 'Volna',
       artwork,
     });
   } catch { /* ignore */ }

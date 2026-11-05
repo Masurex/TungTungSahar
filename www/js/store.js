@@ -1,6 +1,6 @@
 // Tiny persistent store on top of localStorage. Every access is guarded,
 // so the app keeps working in private mode / when storage is blocked.
-const PREFIX = 'sahar:';
+const PREFIX = 'volna:';
 const listeners = new Set();
 
 function read(key, fallback) {

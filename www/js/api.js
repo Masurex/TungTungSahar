@@ -4,7 +4,7 @@
 //  * Radio Browser — open directory of ~50k internet radio stations worldwide.
 import { store } from './store.js';
 
-export const APP_NAME = 'SaharMusic';
+export const APP_NAME = 'VolnaMusic';
 const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 async function getJSON(url, { timeout = 12000 } = {}) {
