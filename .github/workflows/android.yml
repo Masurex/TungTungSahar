@@ -45,21 +45,21 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Sahar.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Volna.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Sahar-apk
-          path: Sahar.apk
+          name: Volna-apk
+          path: Volna.apk
 
       - name: Publish to "latest" release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Sahar — последняя сборка
+          name: Последняя сборка
           body: |
-            Скачайте **Sahar.apk** ниже и установите на Android-телефон.
+            Скачайте **Volna.apk** ниже и установите на Android-телефон.
             Сборка из коммита ${{ github.sha }}.
           prerelease: false
           make_latest: true
-          files: Sahar.apk
+          files: Volna.apk
