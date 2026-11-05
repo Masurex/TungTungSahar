@@ -301,3 +301,17 @@ body:not(.is-playing) .player-art { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------ moods ------------------------------ */
+.moods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mood {
+  min-height: 72px; border-radius: 10px; padding: 12px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 4px;
+}
+.mood b { font-size: 16px; font-weight: 800; }
+.mood span { font-size: 12px; opacity: .85; }
+.mood:active { transform: scale(.98); }
+.mood-hero { border-radius: 14px; padding: 28px 18px 22px; margin-bottom: 18px; }
+.mood-hero h2 { margin: 0; font-size: 30px; font-weight: 850; }
+.mood-hero p { margin: 4px 0 0; opacity: .85; }
+@media (min-width: 700px) { .moods { grid-template-columns: repeat(3, 1fr); } }

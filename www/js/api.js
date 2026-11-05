@@ -91,7 +91,26 @@ function audiusPlaylist(p) {
     artwork: art(p.artwork),
     count: p.track_count || 0,
     isAlbum: !!p.is_album,
+    likes: (p.favorite_count || 0) + (p.repost_count || 0),
   };
+}
+
+const dedupe = (list, key = (x) => x.id) => {
+  const seen = new Set();
+  return list.filter((x) => (seen.has(key(x)) ? false : seen.add(key(x))));
+};
+
+// Popular, non-empty playlists first.
+const rankPlaylists = (list) => dedupe(list)
+  .filter((p) => p.count > 0)
+  .sort((a, b) => b.likes - a.likes || b.count - a.count);
+
+// Interleave several result lists so a mix isn't 20 tracks of one query in a row.
+function interleave(lists) {
+  const out = [];
+  const max = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < max; i++) lists.forEach((l) => { if (l[i]) out.push(l[i]); });
+  return out;
 }
 
 function audiusUser(u) {
@@ -114,6 +133,22 @@ export function streamUrl(item) {
   const host = audiusHost || AUDIUS_GATEWAY;
   return `${host}/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=${APP_NAME}`;
 }
+
+// Mood collections shown on the home screen (search queries behind each one).
+export const MOODS = [
+  { id: 'chill', name: 'Chill', sub: 'Спокойная музыка', q: ['chill', 'chill vibes', 'chillout'] },
+  { id: '8d', name: '8D музыка', sub: 'Слушать в наушниках', q: ['8d', '8d audio', '8d music'] },
+  { id: 'lofi', name: 'Lo-Fi', sub: 'Для учёбы и работы', q: ['lofi', 'lo-fi', 'lofi beats'] },
+  { id: 'phonk', name: 'Phonk', sub: 'Дрифт и фонк', q: ['phonk', 'drift phonk'] },
+  { id: 'sleep', name: 'Для сна', sub: 'Тихо и мягко', q: ['sleep', 'ambient sleep', 'relax'] },
+  { id: 'gym', name: 'Тренировка', sub: 'Энергия', q: ['workout', 'gym', 'gym phonk'] },
+  { id: 'focus', name: 'Фокус', sub: 'Концентрация', q: ['focus', 'study'] },
+  { id: 'party', name: 'Вечеринка', sub: 'Танцевальное', q: ['party', 'dance'] },
+  { id: 'sad', name: 'Грустное', sub: 'Под настроение', q: ['sad', 'sad vibes'] },
+  { id: 'slowed', name: 'Slowed + Reverb', sub: 'Замедленные версии', q: ['slowed reverb', 'slowed'] },
+  { id: 'night', name: 'Ночной драйв', sub: 'Synthwave', q: ['night drive', 'synthwave'] },
+  { id: 'hiphop', name: 'Хип-хоп', sub: 'Биты и рэп', q: ['hip hop', 'rap'] },
+];
 
 export const GENRES = [
   { id: '', name: 'Все жанры' },
@@ -151,11 +186,21 @@ export const api = {
   },
   async searchUsers(q, limit = 10) {
     const data = await audius('/users/search', { query: q, limit });
-    return (data || []).map(audiusUser);
+    // Hide artists with no uploaded tracks.
+    return (data || []).map(audiusUser).filter((u) => u.tracks > 0);
   },
-  async searchPlaylists(q, limit = 10) {
+  async searchPlaylists(q, limit = 30) {
     const data = await audius('/playlists/search', { query: q, limit });
-    return (data || []).map(audiusPlaylist);
+    return rankPlaylists((data || []).map(audiusPlaylist));
+  },
+  // Several queries at once (e.g. a mood like "chill"): merged playlists + a track mix.
+  async moodPlaylists(queries) {
+    const res = await Promise.all(queries.map((q) => this.searchPlaylists(q, 20).catch(() => [])));
+    return rankPlaylists(interleave(res));
+  },
+  async moodTracks(queries) {
+    const res = await Promise.all(queries.map((q) => this.searchTracks(q, 25).catch(() => [])));
+    return dedupe(interleave(res), (t) => t.key);
   },
   async playlist(id) {
     const [meta, tracks] = await Promise.all([

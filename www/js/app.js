@@ -1,4 +1,4 @@
-import { api, GENRES, RADIO_TAGS, RADIO_COUNTRIES } from './api.js';
+import { api, GENRES, MOODS, RADIO_TAGS, RADIO_COUNTRIES } from './api.js';
 import { player } from './player.js';
 import { store } from './store.js';
 import { icon } from './icons.js';
@@ -72,7 +72,8 @@ function card({ href, img, title, sub, round = false, kind = 'music' }) {
   </a>`;
 }
 
-const playlistCard = (p) => card({ href: `#/playlist/${p.id}`, img: p.artwork, title: p.name, sub: p.owner || `${p.count} треков` });
+const playlistCard = (p) => card({ href: `#/playlist/${p.id}`, img: p.artwork, title: p.name, sub: `${p.count} ${plural(p.count, 'трек', 'трека', 'треков')}${p.owner ? ' · ' + p.owner : ''}` });
+function plural(n, one, few, many) { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; }
 const artistCard = (u) => card({ href: `#/artist/${u.id}`, img: u.avatar, title: u.name, sub: `${fmtNum(u.followers)} подписчиков`, round: true, kind: 'user' });
 
 function recentCard(item, listId, i) {
@@ -119,6 +120,7 @@ const views = {
       const id = registerList(recent);
       html += section('Недавно слушали', shelf(recent.map((t, i) => recentCard(t, id, i)).join('')));
     }
+    html = section('Подборки', moodGrid()) + html;
     html += section('Популярные плейлисты', '<div id="plSlot">' + shelf('<div class="card sk"></div>'.repeat(4)) + '</div>');
     html += section('В тренде', `${chips(GENRES, genre, 'genre')}<div id="trSlot">${skeleton(8)}</div>`,
       `<button class="btn sm" data-act="playall" data-slot="trSlot">${icon('play', 16)} Слушать</button>`);
@@ -183,7 +185,7 @@ const views = {
           <button class="icon-btn like${saved ? ' on' : ''}" data-act="savepl" aria-label="Сохранить">${icon(saved ? 'heartFill' : 'heart')}</button>
         </div>`;
       currentPlaylist = { id, name: pl.name, owner: pl.owner, artwork: pl.artwork, count: pl.tracks.length };
-      slot.innerHTML = trackList(pl.tracks, { numbered: true });
+      slot.innerHTML = pl.tracks.length ? trackList(pl.tracks, { numbered: true }) : empty('В этом плейлисте нет доступных треков');
     });
   },
 
@@ -205,7 +207,7 @@ const views = {
         </div>
         <div class="actions">${playButtons('arTracks')}</div>
         <h3 class="sub-h">Популярные треки</h3>`;
-      slot.innerHTML = trackList(a.tracks, { numbered: true });
+      slot.innerHTML = a.tracks.length ? trackList(a.tracks, { numbered: true }) : empty('У исполнителя пока нет доступных треков');
     });
   },
 
@@ -259,6 +261,31 @@ const views = {
 
 let currentPlaylist = null;
 
+function moodGrid() {
+  return `<div class="moods">${MOODS.map((m, i) => `<a class="mood g${i % 8}" href="#/mood/${m.id}"><b>${esc(m.name)}</b><span>${esc(m.sub)}</span></a>`).join('')}</div>`;
+}
+
+views.mood = async ([id], token) => {
+  const m = MOODS.find((x) => x.id === id);
+  if (!m) { location.hash = '#/home'; return; }
+  setTitle(m.name, true);
+  view.innerHTML = `
+    <div class="mood-hero g${MOODS.indexOf(m) % 8}"><h2>${esc(m.name)}</h2><p>${esc(m.sub)}</p></div>
+    ${section('Плейлисты', `<div id="moodPl">${shelf('<div class="card sk"></div>'.repeat(4))}</div>`)}
+    ${section('Микс треков', `<div class="actions">${playButtons('moodTr')}</div><div id="moodTr">${skeleton(8)}</div>`)}`;
+  const pl = $('#moodPl'), tr = $('#moodTr');
+  guarded(token, pl, async () => {
+    const lists = await api.moodPlaylists(m.q);
+    if (isStale(token)) return;
+    pl.innerHTML = lists.length ? `<div class="grid">${lists.slice(0, 18).map(playlistCard).join('')}</div>` : empty('Плейлисты не найдены');
+  });
+  guarded(token, tr, async () => {
+    const tracks = await api.moodTracks(m.q);
+    if (isStale(token)) return;
+    tr.innerHTML = trackList(tracks.slice(0, 60));
+  });
+};
+
 function playButtons(slotId) {
   return `<button class="btn primary" data-act="playall" data-slot="${slotId}">${icon('play', 18)} Слушать</button>
           <button class="btn" data-act="shuffleall" data-slot="${slotId}">${icon('shuffle', 18)} Вперемешку</button>`;
@@ -285,7 +312,7 @@ async function runSearch(q, token) {
   const slot = $('#searchSlot');
   if (!slot) return;
   if (!q) {
-    slot.innerHTML = section('Жанры', `<div class="genres">${GENRES.filter((g) => g.id).map((g, i) => `<a class="genre g${i % 8}" href="#/genre/${encodeURIComponent(g.id)}">${esc(g.name)}</a>`).join('')}</div>`);
+    slot.innerHTML = section('Подборки', moodGrid()) + section('Жанры', `<div class="genres">${GENRES.filter((g) => g.id).map((g, i) => `<a class="genre g${i % 8}" href="#/genre/${encodeURIComponent(g.id)}">${esc(g.name)}</a>`).join('')}</div>`);
     return;
   }
   slot.innerHTML = skeleton(8);
@@ -298,9 +325,10 @@ async function runSearch(q, token) {
     ]);
     if (isStale(token) || myToken !== searchSeq || !slot.isConnected) return;
     let html = '';
+    if (pls.length) html += section('Плейлисты', `<div class="grid">${pls.slice(0, 12).map(playlistCard).join('')}</div>`);
+    if (tracks.length) html += section('Треки', `<div class="actions">${playButtons('srTracks')}</div><div id="srTracks">${trackList(tracks)}</div>`);
     if (users.length) html += section('Исполнители', shelf(users.map(artistCard).join('')));
-    if (pls.length) html += section('Плейлисты и альбомы', shelf(pls.map(playlistCard).join('')));
-    html += section('Треки', tracks.length ? trackList(tracks) : empty('Ничего не найдено'));
+    if (!html) html = empty('Ничего не найдено. Попробуйте другое слово: chill, 8d, phonk, lofi…');
     slot.innerHTML = html;
   });
 }
@@ -330,7 +358,7 @@ function route() {
   const fn = views[name] || views.home;
   lists = {};
   const token = ++renderToken;
-  const tab = ['home', 'search', 'radio', 'library'].includes(name) ? name : (name === 'genre' ? 'search' : null);
+  const tab = ['home', 'search', 'radio', 'library'].includes(name) ? name : (name === 'genre' ? 'search' : name === 'mood' ? 'home' : null);
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   fn(params, token);
   view.scrollTop = 0;
