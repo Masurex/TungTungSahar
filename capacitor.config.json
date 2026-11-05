@@ -1,0 +1,13 @@
+{
+  "appId": "com.tungtungsahar.music",
+  "appName": "Sahar",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#121014"
+  }
+}
