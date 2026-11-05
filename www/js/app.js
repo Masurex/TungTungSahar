@@ -2,6 +2,7 @@ import { api, GENRES, MOODS, RADIO_TAGS, RADIO_COUNTRIES } from './api.js';
 import { player } from './player.js';
 import { store } from './store.js';
 import { icon } from './icons.js';
+import { dailyMixes, findMix, mixTracks } from './mixes.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
@@ -120,7 +121,8 @@ const views = {
       const id = registerList(recent);
       html += section('Недавно слушали', shelf(recent.map((t, i) => recentCard(t, id, i)).join('')));
     }
-    html = section('Подборки', moodGrid()) + html;
+    html = section('Миксы дня', shelf(dailyMixes().map(mixCard).join('')), '<span class="sec-note">Обновляются каждый день</span>')
+      + section('Подборки', moodGrid()) + html;
     html += section('Популярные плейлисты', '<div id="plSlot">' + shelf('<div class="card sk"></div>'.repeat(4)) + '</div>');
     html += section('В тренде', `${chips(GENRES, genre, 'genre')}<div id="trSlot">${skeleton(8)}</div>`,
       `<button class="btn sm" data-act="playall" data-slot="trSlot">${icon('play', 16)} Слушать</button>`);
@@ -261,6 +263,38 @@ const views = {
 
 let currentPlaylist = null;
 
+function mixCover(m, cls = '') {
+  return `<span class="mix-cover g${m.color % 8} ${cls}">
+    ${m.cover ? `<img src="${esc(m.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+    <span class="mix-label">${esc(m.title)}</span>
+  </span>`;
+}
+
+function mixCard(m) {
+  return `<a class="card" href="#/mix/${encodeURIComponent(m.id)}">
+    ${mixCover(m)}
+    <span class="card-sub mix-sub">${esc(m.sub)}</span>
+  </a>`;
+}
+
+views.mix = async ([id], token) => {
+  const m = findMix(id);
+  if (!m) { location.hash = '#/home'; return; }
+  setTitle('Микс дня', true);
+  view.innerHTML = `
+    <div class="hero">${mixCover(m, 'hero-art')}
+      <div class="hero-text"><h2>${esc(m.title)}</h2><p>${esc(m.sub)}</p></div>
+    </div>
+    <div class="actions">${playButtons('mixTr')}</div>
+    <div id="mixTr">${skeleton(10)}</div>`;
+  const slot = $('#mixTr');
+  guarded(token, slot, async () => {
+    const tracks = await mixTracks(m);
+    if (isStale(token)) return;
+    slot.innerHTML = tracks.length ? trackList(tracks) : empty('Не удалось собрать микс, попробуйте позже');
+  });
+};
+
 function moodGrid() {
   return `<div class="moods">${MOODS.map((m, i) => `<a class="mood g${i % 8}" href="#/mood/${m.id}"><b>${esc(m.name)}</b><span>${esc(m.sub)}</span></a>`).join('')}</div>`;
 }
@@ -358,7 +392,7 @@ function route() {
   const fn = views[name] || views.home;
   lists = {};
   const token = ++renderToken;
-  const tab = ['home', 'search', 'radio', 'library'].includes(name) ? name : (name === 'genre' ? 'search' : name === 'mood' ? 'home' : null);
+  const tab = ['home', 'search', 'radio', 'library'].includes(name) ? name : (name === 'genre' ? 'search' : (name === 'mood' || name === 'mix') ? 'home' : null);
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   fn(params, token);
   view.scrollTop = 0;
@@ -620,6 +654,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* --------------------------------- boot --------------------------------- */
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 player.restore();
 syncState();
 route();

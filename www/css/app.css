@@ -315,3 +315,17 @@ body:not(.is-playing) .player-art { transform: scale(.94); }
 .mood-hero h2 { margin: 0; font-size: 30px; font-weight: 850; }
 .mood-hero p { margin: 4px 0 0; opacity: .85; }
 @media (min-width: 700px) { .moods { grid-template-columns: repeat(3, 1fr); } }
+
+/* ------------------------------ daily mixes ------------------------------ */
+.sec-note { color: var(--muted); font-size: 12.5px; }
+.mix-cover {
+  position: relative; display: block; width: 100%; aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+}
+.mix-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mix-cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 35%, rgba(0,0,0,.75)); }
+.mix-label {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 1;
+  font-weight: 850; font-size: 17px; line-height: 1.15; text-shadow: 0 1px 6px rgba(0,0,0,.5);
+}
+.mix-cover.hero-art .mix-label { font-size: 26px; left: 16px; bottom: 16px; }
+.mix-sub { margin-top: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

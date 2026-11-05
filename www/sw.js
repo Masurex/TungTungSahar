@@ -1,9 +1,9 @@
 // Service worker: caches only the app shell so the app opens instantly.
 // Music is never cached — it is always streamed.
-const CACHE = 'volna-shell-v1';
+const CACHE = 'volna-shell-v2';
 const SHELL = [
   './', 'index.html', 'css/app.css',
-  'js/app.js', 'js/api.js', 'js/player.js', 'js/store.js', 'js/icons.js',
+  'js/app.js', 'js/api.js', 'js/mixes.js', 'js/player.js', 'js/store.js', 'js/icons.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
