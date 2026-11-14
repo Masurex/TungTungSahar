@@ -35,7 +35,43 @@ namespace SaharVPN
 
         public string Security => Get("security", Protocol == "trojan" ? "tls" : "none").ToLowerInvariant();
 
-        public string DisplayName => string.IsNullOrEmpty(Remark) ? Address + ":" + Port : Remark;
+        public string DisplayName
+        {
+            get
+            {
+                string name = CleanName(Remark ?? "");
+                return name.Length == 0 ? Address + ":" + Port : name;
+            }
+        }
+
+        /// <summary>
+        /// Windows 7 can't draw emoji (they show up as boxes). Flags become country codes (🇳🇱 → NL), other emoji are dropped.
+        /// </summary>
+        static string CleanName(string s)
+        {
+            var sb = new StringBuilder();
+            int flagLetters = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                {
+                    int cp = char.ConvertToUtf32(c, s[i + 1]);
+                    i++;
+                    if (cp >= 0x1F1E6 && cp <= 0x1F1FF)
+                    {
+                        sb.Append((char)('A' + (cp - 0x1F1E6)));
+                        if (++flagLetters % 2 == 0) sb.Append(' ');
+                    }
+                    continue;
+                }
+                if (char.IsSurrogate(c) || c == '️' || c == '‍' || c == '⃣' || (c >= '☀' && c <= '➿') || (c >= '⬀' && c <= '⯿'))
+                    continue;
+                sb.Append(c);
+            }
+            var parts = sb.ToString().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            return string.Join(" ", parts).Trim(' ', '|', '-', '·', '_');
+        }
 
         public string TypeLabel
         {

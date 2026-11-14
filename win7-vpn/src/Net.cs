@@ -142,18 +142,19 @@ namespace SaharVPN
         }
 
         /// <summary>Real round trip through the tunnel: HTTP 204 from Google via the local proxy. ms or -1.</summary>
-        public static Task<int> ProxyDelay()
+        public static Task<int> ProxyDelay(int port = XrayConfig.HttpPort, int attempts = 2, int timeoutMs = 8000)
         {
             return Task.Run(() =>
             {
                 int best = -1;
-                for (int attempt = 0; attempt < 2; attempt++) // first request includes the handshake
+                for (int attempt = 0; attempt < attempts; attempt++) // first request includes the handshake
                 {
                     try
                     {
                         var req = (HttpWebRequest)WebRequest.Create("http://www.gstatic.com/generate_204");
-                        req.Proxy = new WebProxy("127.0.0.1", XrayConfig.HttpPort);
-                        req.Timeout = 10000;
+                        req.Proxy = new WebProxy("127.0.0.1", port);
+                        req.Timeout = timeoutMs;
+                        req.ReadWriteTimeout = timeoutMs;
                         req.KeepAlive = false;
                         var sw = Stopwatch.StartNew();
                         using (var resp = (HttpWebResponse)req.GetResponse()) { }

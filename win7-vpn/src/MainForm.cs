@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -18,7 +19,7 @@ namespace SaharVPN
 
         List<ServerProfile> profiles = new List<ServerProfile>();
         readonly Dictionary<string, int> pings = new Dictionary<string, int>();
-        bool connected, busy, exiting;
+        bool connected, busy, exiting, testing;
         string activeLink;
 
         // UI
@@ -50,7 +51,7 @@ namespace SaharVPN
             RefreshList();
             SetState(Icons.Off, "Отключено");
 
-            var startup = new Timer { Interval = 300 };
+            var startup = new System.Windows.Forms.Timer { Interval = 300 };
             startup.Tick += async (s, e) => { startup.Stop(); startup.Dispose(); await OnStartup(); };
             startup.Start();
         }
@@ -88,7 +89,7 @@ namespace SaharVPN
             toolbar.Controls.Add(MakeButton("Вставить ключ из буфера", async () => await PasteFromClipboard()));
             toolbar.Controls.Add(MakeButton("Подписка…", async () => await EditSubscription()));
             toolbar.Controls.Add(MakeButton("Обновить подписку", async () => await UpdateSubscription(true)));
-            toolbar.Controls.Add(MakeButton("Пинг", async () => await PingAll()));
+            toolbar.Controls.Add(MakeButton("Проверить все серверы", async () => await TestAll()));
             toolbar.Controls.Add(MakeButton("Проверить связь", async () => await CheckConnection()));
             toolbar.Controls.Add(MakeButton("Удалить", () => { DeleteSelected(); return Task.FromResult(0); }));
 
@@ -101,7 +102,7 @@ namespace SaharVPN
             list.Columns.Add("Сервер", 250);
             list.Columns.Add("Тип", 160);
             list.Columns.Add("Адрес", 190);
-            list.Columns.Add("Пинг", 80);
+            list.Columns.Add("Проверка", 90);
             list.SelectedIndexChanged += async (s, e) => await OnSelectionChanged();
             list.DoubleClick += async (s, e) => { if (!connected) await Connect(); };
 
@@ -236,6 +237,8 @@ namespace SaharVPN
         void RefreshList()
         {
             profiles = store.AllProfiles();
+            if (pings.Count > 0) // after a test: working servers first, fastest on top
+                profiles = profiles.OrderBy(p => pings.TryGetValue(p.Link, out int m) ? (m >= 0 ? m : 100000) : 50000).ToList();
             string selected = store.Get("selected");
             list.BeginUpdate();
             list.Items.Clear();
@@ -261,7 +264,7 @@ namespace SaharVPN
         string PingText(ServerProfile p)
         {
             if (!pings.TryGetValue(p.Link, out int ms)) return "";
-            return ms < 0 ? "нет ответа" : ms + " мс";
+            return ms < 0 ? "не работает" : ms + " мс";
         }
 
         ServerProfile SelectedProfile()
@@ -401,7 +404,8 @@ namespace SaharVPN
 
         async Task OnStartup()
         {
-            if (!File.Exists(store.XrayExe))
+            if (File.Exists(store.XrayExe)) XrayRunner.KillOrphans(store.XrayExe);
+            else
                 AppendLog("Внимание: не найден файл " + store.XrayExe + " — распакуйте архив программы целиком.");
             if (store.Get("subUrl").Length > 0) await UpdateSubscription(false);
             if (chkAutoConnect.Checked && profiles.Count > 0) await Connect();
@@ -460,7 +464,7 @@ namespace SaharVPN
                 if (!connected || activeLink != p.Link) return;
                 lblInfo.Text = ms >= 0
                     ? p.DisplayName + "\nИнтернет через VPN работает, задержка " + ms + " мс"
-                    : p.DisplayName + "\nВнимание: Сервер не отвечает. Проверьте ключ или выберите другой сервер.";
+                    : p.DisplayName + "\nВнимание: сервер не отвечает. Нажмите «Проверить все серверы» — программа найдёт рабочий.";
                 AppendLog(ms >= 0 ? "Проверка связи: " + ms + " мс" : "Проверка связи: нет ответа через VPN");
                 if (!Visible) tray.ShowBalloonTip(3000, "SaharVPN", "Подключено: " + p.DisplayName, ToolTipIcon.Info);
             }
@@ -504,18 +508,88 @@ namespace SaharVPN
             lblInfo.Text = name + "\n" + (ms >= 0 ? "Интернет через VPN работает, задержка " + ms + " мс" : "Внимание: Нет ответа через VPN");
         }
 
-        async Task PingAll()
+        /// <summary>
+        /// Real test: one temporary Xray instance with a local port per server, then an HTTP request through each.
+        /// Works while connected too (different ports).
+        /// </summary>
+        async Task TestAll()
         {
+            if (testing) return;
+            if (!File.Exists(store.XrayExe)) { Info("Не найдено ядро " + store.XrayExe, MessageBoxIcon.Error); return; }
             var snapshot = profiles.ToList();
-            AppendLog("Проверяю пинг " + snapshot.Count + " серверов…");
-            var tasks = snapshot.Select(async p =>
+            if (snapshot.Count == 0) { Info("Список серверов пуст. Сначала вставьте ключ или подписку."); return; }
+
+            testing = true;
+            var tester = new XrayRunner();
+            int logged = 0;
+            tester.Log += line => Ui(() =>
             {
-                int ms = await Net.TcpPing(p.Address, p.Port);
-                pings[p.Link] = ms;
-                foreach (ListViewItem item in list.Items)
-                    if (((ServerProfile)item.Tag).Link == p.Link) item.SubItems[3].Text = PingText(p);
+                if ((line.Contains("[Error]") || line.Contains("[Warning]")) && !line.Contains("started") && logged++ < 40)
+                    AppendLog("[проверка] " + line);
             });
-            await Task.WhenAll(tasks);
+            string cfg = Path.Combine(store.DataDir, "test.json");
+            int n = snapshot.Count, done = 0, ok = 0;
+            try
+            {
+                File.WriteAllText(cfg, XrayConfig.BuildTest(snapshot), Utf8);
+                AppendLog("Проверяю " + n + " серверов через VPN…");
+                foreach (ListViewItem item in list.Items) item.SubItems[3].Text = "…";
+                lblInfo.Text = "Проверяю серверы… Это займёт до минуты.";
+                tester.Start(store.XrayExe, cfg);
+                await Task.Delay(1500);
+                if (!tester.IsRunning)
+                {
+                    Info("Не удалось запустить проверку — подробности в журнале внизу окна.", MessageBoxIcon.Error);
+                    return;
+                }
+
+                var gate = new SemaphoreSlim(12);
+                var tasks = snapshot.Select(async (p, i) =>
+                {
+                    int ms;
+                    await gate.WaitAsync();
+                    try { ms = await Net.ProxyDelay(XrayConfig.TestBasePort + i, 1, 10000); }
+                    finally { gate.Release(); }
+                    pings[p.Link] = ms;
+                    done++;
+                    if (ms >= 0) ok++;
+                    foreach (ListViewItem item in list.Items)
+                        if (((ServerProfile)item.Tag).Link == p.Link) item.SubItems[3].Text = PingText(p);
+                    lblInfo.Text = "Проверено " + done + " из " + n + ", работают: " + ok;
+                }).ToList();
+                await Task.WhenAll(tasks);
+            }
+            catch (Exception ex)
+            {
+                AppendLog("Ошибка проверки: " + ex.Message);
+            }
+            finally
+            {
+                tester.Stop();
+                testing = false;
+            }
+
+            AppendLog("Проверка завершена: работают " + ok + " из " + n);
+            var best = snapshot.Where(p => pings.TryGetValue(p.Link, out int m) && m >= 0)
+                               .OrderBy(p => pings[p.Link]).FirstOrDefault();
+            RefreshList(); // working servers go to the top
+            if (best != null)
+            {
+                var item = list.Items.Cast<ListViewItem>().First(i => ((ServerProfile)i.Tag).Link == best.Link);
+                bool wasConnected = connected;
+                item.Selected = true; // switches the VPN if connected
+                item.EnsureVisible();
+                Info("Работают серверов: " + ok + " из " + n + ".\nВыбран самый быстрый: " + best.DisplayName +
+                     " (" + pings[best.Link] + " мс).\n\n" + (wasConnected ? "VPN переключён на него." : "Нажмите «Подключить»."));
+            }
+            else if (done == n)
+            {
+                lblInfo.Text = "Ни один сервер не ответил через VPN.";
+                Info("Ни один сервер не ответил через VPN.\n\nВозможные причины:\n" +
+                     "• подписка закончилась или устарела — нажмите «Обновить подписку» и проверьте подписку в боте;\n" +
+                     "• ваш провайдер блокирует эти серверы — проверьте, работает ли Happ на телефоне через тот же интернет " +
+                     "(тот же Wi-Fi или модем).\n\nТекст ошибок — в журнале внизу окна.", MessageBoxIcon.Warning);
+            }
         }
 
         // ------------------------------------------------------------------ system proxy / autostart

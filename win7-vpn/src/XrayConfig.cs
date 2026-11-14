@@ -49,6 +49,32 @@ namespace SaharVPN
             return Serialize(config);
         }
 
+        public const int TestBasePort = 20800;
+
+        /// <summary>
+        /// One Xray instance that tests many servers at once: local HTTP port TestBasePort+i goes through server i.
+        /// </summary>
+        public static string BuildTest(IList<ServerProfile> list)
+        {
+            var inbounds = new List<object>();
+            var outbounds = new List<object>();
+            var rules = new List<object>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                inbounds.Add(Obj("tag", "in" + i, "listen", "127.0.0.1", "port", TestBasePort + i, "protocol", "http"));
+                var o = BuildOutbound(list[i]);
+                o["tag"] = "out" + i;
+                outbounds.Add(o);
+                rules.Add(Obj("type", "field", "inboundTag", Arr("in" + i), "outboundTag", "out" + i));
+            }
+            outbounds.Add(Obj("tag", "direct", "protocol", "freedom"));
+            return Serialize(Obj(
+                "log", Obj("loglevel", "warning", "access", "none"),
+                "inbounds", inbounds,
+                "outbounds", outbounds,
+                "routing", Obj("domainStrategy", "AsIs", "rules", rules)));
+        }
+
         static Dictionary<string, object> BuildOutbound(ServerProfile p)
         {
             switch (p.Protocol)

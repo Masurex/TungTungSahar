@@ -25,7 +25,6 @@ namespace SaharVPN
         public void Start(string exe, string configFile)
         {
             Stop();
-            KillOrphans(exe);
             stopping = false;
 
             var psi = new ProcessStartInfo(exe, "run -c \"" + configFile + "\"")
@@ -73,7 +72,7 @@ namespace SaharVPN
         }
 
         /// <summary>Kills xray.exe instances left over from a previous crash of this program (they would hold the ports).</summary>
-        static void KillOrphans(string exe)
+        public static void KillOrphans(string exe)
         {
             string full = Path.GetFullPath(exe);
             foreach (var p in Process.GetProcessesByName("xray"))
