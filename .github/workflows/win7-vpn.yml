@@ -1,0 +1,60 @@
+name: SaharVPN (Windows 7, 32-bit)
+
+on:
+  push:
+    branches: [main, master, 'claude/**', 'ccr-**']
+    paths:
+      - 'win7-vpn/**'
+      - '.github/workflows/win7-vpn.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build SaharVPN.exe (.NET Framework 4.5, x86)
+        run: dotnet build win7-vpn/SaharVPN.csproj -c Release -o dist/SaharVPN
+
+      - name: Download Xray-core built for Windows 7 32-bit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo XTLS/Xray-core --pattern 'Xray-win7-32.zip' --output xray.zip
+          mkdir -p dist/SaharVPN/core
+          unzip -o xray.zip -d dist/SaharVPN/core
+          test -f dist/SaharVPN/core/xray.exe
+          test -f dist/SaharVPN/core/geoip.dat
+          gh release view --repo XTLS/Xray-core --json tagName -q .tagName > dist/SaharVPN/core/VERSION.txt
+
+      - name: Package
+        run: |
+          # UTF-8 BOM so Windows 7 Notepad shows Cyrillic correctly
+          { printf '\xEF\xBB\xBF'; cat win7-vpn/README.md; } > "dist/SaharVPN/Инструкция.txt"
+          cd dist && zip -r ../SaharVPN-win7-32.zip SaharVPN
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaharVPN-win7-32
+          path: SaharVPN-win7-32.zip
+
+      - name: Publish to "win7-vpn" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: win7-vpn
+          name: SaharVPN для Windows 7 (32 бит)
+          body: |
+            Скачайте **SaharVPN-win7-32.zip** ниже, распакуйте в любую папку и запустите **SaharVPN.exe**.
+            Нужен .NET Framework 4.5 или новее (лучше 4.8).
+            Сборка из коммита ${{ github.sha }}.
+          prerelease: false
+          make_latest: false
+          files: SaharVPN-win7-32.zip

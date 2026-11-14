@@ -3,3 +3,5 @@ android/
 ios/
 *.apk
 .DS_Store
+win7-vpn/bin/
+win7-vpn/obj/
